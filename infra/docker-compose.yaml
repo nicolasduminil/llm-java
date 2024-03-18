@@ -1,0 +1,30 @@
+version: "3.7"
+services:
+  ollama:
+    image: ollama/ollama
+    hostname: ollama
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    expose:
+      - 11434
+  haiku:
+    image: quarkus-llm/haiku:1.0-SNAPSHOT
+    depends_on:
+      - ollama
+    hostname: haiku
+    container_name: haiku
+    links:
+      - ollama:ollama
+    ports:
+      - "8080:8080"
+    environment:
+      JAVA_DEBUG: "true"
+      JAVA_APP_DIR: /home/jboss
+      JAVA_APP_JAR: quarkus-run.jar
+volumes:
+  ollama:
+    driver: local
+
