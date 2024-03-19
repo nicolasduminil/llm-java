@@ -1,13 +1,11 @@
 version: "3.7"
 services:
   ollama:
-    image: ollama/ollama
+    image: nicolasduminil/ollama:llama2
     hostname: ollama
     container_name: ollama
     ports:
       - "11434:11434"
-    volumes:
-      - ollama:/root/.ollama
     expose:
       - 11434
   haiku:
@@ -24,7 +22,3 @@ services:
       JAVA_DEBUG: "true"
       JAVA_APP_DIR: /home/jboss
       JAVA_APP_JAR: quarkus-run.jar
-volumes:
-  ollama:
-    driver: local
-
