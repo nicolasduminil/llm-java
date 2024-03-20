@@ -162,3 +162,112 @@ to create a Docker image to run the micro-service. The attributes of this Docker
 
 These attributes state that the new created Docker image name will be `quarkus-llm/haiku` and its entrypoint will be the
 `run-java.sh` shell script located in the container's `/opt/jboss/container/java/run` directory.
+
+This project uses the Quarkus extension `quarkus-langchain4j-ollama` which provides integration with the 
+LangChain4j library and the Ollama tool. Ollama is an advanced AI streamlined utility that allows users to set up and 
+run locally large LLMs, like `openai`, `llama2`, `mistral` and others. Here we're being running `llama2` locally. This
+is configured again in the `application.properties` by the following statement:
+
+    quarkus.langchain4j.ollama.chat-model.model-id=llama2:latest
+
+This declaration states that the LLM used here in order to serve AI requests will be `llama2` in its last version. Let's
+have a look now to our AI service itself:
+
+    @RegisterAiService
+    public interface HaikuService
+    {
+      @SystemMessage("You are a professional haiku poet")
+      @UserMessage("Write a haiku about {subject}.")
+      String writeHaiku(String subject);
+    }
+
+That's all ! You can see it, our AI service is an interface annotated with the `@RegisterAiService` annotation. The 
+annotation processor provided by the Quarkus extension will generate the class which implements this interface. In order
+to be able to serve request, any conversational LLM needs a context or scope. In our case, this scope is the one of an
+artist, specialized in composing haikus. This is the role of the `@SystemMessage` annotation: to set up the current scope.
+Last but not least, the `@UserMessage` annotation allows to define the text which will serve as a prompt to the AI service.
+Here we're requesting our AI service to compose a haiku on a topic that is defined by the input parameter `subject`, of 
+type `String`.
+
+## The infrastructure module
+
+After having examined the implementation of our AI service, let's see how could we set up the required infrastructure.
+The infrastructure module, named `infra`, is a `maven` sub-project using the `docker-compose` utility to start the
+following Docker containers:
+
+  - a Docker container named `ollama` running an image tagged `nicolasduminil/ollama:llama2`. This image is simply the official Ollama Docker image which has been augmented such that to include the `llama2` LLM. As explained earlier, Ollama is able to run locally several LLMs and, in order to make available these LLMs, we need to pull them from their Docker registries. This is why, when running the Ollama official Docker container, one needs typically to pull the chosen LLM and, in order to avoid this repetitive operation, I have extended this official Docker container to already include the `llama2` LLM.
+  - a Docker container named `haiku` running the image tagged `quarkus-llm/haiku`, which is precisely our AI service. 
+
+Here is the associated `docker-compose.yaml` file required to create the infrastructure described above:
+
+    version: "3.7"
+    services:
+      ollama:
+        image: nicolasduminil/ollama:llama2
+        hostname: ollama
+        container_name: ollama
+        ports:
+          - "11434:11434"
+        expose:
+          - 11434
+      haiku:
+        image: quarkus-llm/haiku:1.0-SNAPSHOT
+        depends_on:
+          - ollama
+        hostname: haiku
+        container_name: haiku
+        links:
+          - ollama:ollama
+        ports:
+          - "8080:8080"
+        environment:
+          JAVA_DEBUG: "true"
+          JAVA_APP_DIR: /home/jboss
+          JAVA_APP_JAR: quarkus-run.jar
+
+As you can see, the `ollama` service runs on a node having the DNS name of `ollama` and listens on the TCP port
+number 11434. Our AI service needs hence to be configured appropriately such that to connect to the same node/port.
+Again, its file `application.properties` is used for this purposes, as shown below:
+
+    quarkus.langchain4j.ollama.base-url=http://ollama:11434
+
+This declaration means that our AI service will send its requests to the URL http://ollama:11434, where `ollama` is
+converted by the DNS service into the IP address allocated to the Docker container having the same name.
+
+## Running and testing
+
+In order to run and test the sample project, procceed as follows:
+1. Clone the repository:
+      
+       $ git clone https://github.com/nicolasduminil/llm-java.git
+
+2. cd to the project 
+
+       $ cd llm-java
+
+3. Build the project:
+
+       $ mvn clean install
+
+4. Check that all the required containers are running:
+
+       $ docker ps
+       CONTAINER ID   IMAGE                            COMMAND                  CREATED         STATUS         PORTS                                                 NAMES
+       19006601c908   quarkus-llm/haiku:1.0-SNAPSHOT   "/opt/jboss/containe…"   5 seconds ago   Up 4 seconds   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp, 8443/tcp   haiku
+       602e6bb06aa9   nicolasduminil/ollama:llama2     "/bin/ollama serve"      5 seconds ago   Up 4 seconds   0.0.0.0:11434->11434/tcp, :::11434->11434/tcp         ollama
+
+5. Run the open-api interface to test the service. Fire your prefered browser at http://localhost:8080/q/swaggerui. In 
+   the Swagger dialog labeled `Haiku API` that is displayed, click on the `GET` button and use the `Try it` function to perform tests. 
+   In the text field labeled `Subject` type in the topic on which you want our AI service to compose a haiku or keep the default one
+   which is `samurai`. The figure below shows the test result:
+
+   ![Swagger](swagger.png)
+
+   You can also test by sending GET request to our AI service using the `curl` utility, as shown below:
+
+       $ curl http://localhost:8080/haiku?subject=quarkus
+       Quarkus, tiny gem
+       In the cosmic sea of space
+       Glints like a star
+
+Enjoy !
