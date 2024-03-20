@@ -96,6 +96,69 @@ LLMs.
 ## The Project
 
 In order to illustrate our discourse, we'll be using a simple Java program which performs a natural language task. The use
-case that we chose for this purpose is to interact with the AI agent, to ask it to compose a haiku and to send it by email.
-As you can see, the usefulness of such a task isn't really striking and, as a matter of fact, more than a veritable use
-case, is a pretext to demonstrate some LangChain4j features while using a ludic and hopefully original form. 
+case that we chose for this purpose is to interact with the AI agent, to ask it to compose a haiku. For those who don't 
+know what's a haiku, here is the Britannica definition: "unrhymed poetic form consisting of 17 syllables arranged in three
+lines of 5, 7, and 5 syllables respectively". As you can see, the usefulness of such a task isn't really striking and, 
+as a matter of fact, more than a veritable use case, is a pretext to demonstrate some LangChain4j features, while using a
+ludic and hopefully original form. 
+
+So, our project is a `maven` multi-module project having the following structure:
+
+  - a master POM name `llm-java`;
+  - a JAX-RS module, named `haiku`, exposing a REST API which invokes the LLM model;
+  - an infrastructure module, named `infra`, which creates the required Docker images and runs them;
+
+### The Master POM
+
+Our project is a Quarkus project, hence the use of the following BOM (*Bill Of Material*):
+
+      <dependencyManagement>
+        <dependencies>
+          <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-bom</artifactId>
+            <version>${quarkus.version}</version>
+            <type>pom</type>
+            <scope>import</scope>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
+
+It uses Quarkus 3.8.3, Java 17and LangChain4j 0.25.0.
+
+## The JAX-RS Module
+
+This module, named `haiku`, is using the `quarkus-resteasy-reactive-jackson` Quarkus extension in order to expose a REST
+API, as follows:
+
+    @Path("/haiku")
+    public class HaikuResource
+    {
+      private final HaikuService haikuService;
+
+      public HaikuResource(HaikuService haikuService)
+      {
+        this.haikuService = haikuService;
+      }
+
+      @GET
+      public String makeHaiku(@DefaultValue("samurai") @RestQuery String subject)
+      {
+        return haikuService.writeHaiku(subject);
+      }
+    }
+
+As you can see, this API defines an endpoint listening for GET HTTP requests, accepting the haiku subject as a query 
+parameter, which default value is "samurai". The module uses also the `quarkus-container-image-jib` Quarkus extension
+to create a Docker image to run the micro-service. The attributes of this Docker image are defined in the 
+`application.properties` file, as shown below:
+
+    ...
+    quarkus.container-image.build=true
+    quarkus.container-image.group=quarkus-llm
+    quarkus.container-image.name=haiku
+    quarkus.jib.jvm-entrypoint=/opt/jboss/container/java/run/run-java.sh
+    ...
+
+These attributes state that the new created Docker image name will be `quarkus-llm/haiku` and its entrypoint will be the
+`run-java.sh` shell script located in the container's `/opt/jboss/container/java/run` directory.
