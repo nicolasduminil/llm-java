@@ -14,8 +14,16 @@ public class HaikuResource
   }
 
   @GET
+  @Path("write")
   public String makeHaiku(@DefaultValue("samurai") @RestQuery String subject)
   {
-    return haikuService.writeHaiku(subject);
+    return haikuService.writeHaiku("myHaiku", subject);
+  }
+
+  @GET
+  @Path("remind")
+  public String lastHaiku()
+  {
+    return haikuService.lastHaiku("myHaiku");
   }
 }
